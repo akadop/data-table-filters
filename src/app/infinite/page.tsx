@@ -1,17 +1,24 @@
-import * as React from "react";
-import { searchParamsCache } from "./search-params";
 import { getQueryClient } from "@/providers/get-query-client";
-import { dataOptions } from "./query-options";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import { SearchParams } from "nuqs";
 import { Client } from "./client";
+import { dataOptions } from "./query-options";
+import { searchParamsCache } from "./search-params";
 
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  searchParams: Promise<SearchParams>;
 }) {
-  const search = searchParamsCache.parse(await searchParams);
+  const search = await searchParamsCache.parse(searchParams);
   const queryClient = getQueryClient();
   await queryClient.prefetchInfiniteQuery(dataOptions(search));
 
-  return <Client />;
+  const dehydratedState = dehydrate(queryClient);
+
+  return (
+    <HydrationBoundary state={dehydratedState}>
+      <Client />
+    </HydrationBoundary>
+  );
 }
