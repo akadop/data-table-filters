@@ -1,16 +1,16 @@
 "use client";
 
-import { X } from "lucide-react";
-import { Button } from "../ui/button";
+import { Kbd } from "@/components/custom/kbd";
+import { useDataTable } from "@/components/data-table/data-table-provider";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Kbd } from "@/components/custom/kbd";
 import { useHotKey } from "@/hooks/use-hot-key";
-import { useDataTable } from "@/components/data-table/data-table-provider";
+import { X } from "lucide-react";
+import { Button } from "../ui/button";
 
 export function DataTableResetButton() {
   const { table } = useDataTable();
@@ -18,7 +18,7 @@ export function DataTableResetButton() {
 
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
           <Button
             variant="ghost"

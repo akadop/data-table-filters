@@ -2,21 +2,80 @@
 
 import { useHotKey } from "@/hooks/use-hot-key";
 import { getLevelRowClassName } from "@/lib/request/level";
+import {
+  DataTableStoreProvider,
+  useFilterState,
+  type AdapterType,
+} from "@/lib/store";
+import { useNuqsAdapter } from "@/lib/store/adapters/nuqs";
+import { useZustandAdapter } from "@/lib/store/adapters/zustand";
 import { cn } from "@/lib/utils";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { Table as TTable } from "@tanstack/react-table";
-import { useQueryState, useQueryStates } from "nuqs";
 import * as React from "react";
 import { LiveRow } from "./_components/live-row";
 import { columns } from "./columns";
 import { filterFields as defaultFilterFields, sheetFields } from "./constants";
 import { DataTableInfinite } from "./data-table-infinite";
 import { dataOptions } from "./query-options";
-import type { FacetMetadataSchema } from "./schema";
-import { searchParamsParser } from "./search-params";
+import type { FacetMetadataSchema, FilterState } from "./schema";
+import { filterSchema } from "./schema";
+import { useFilterStore } from "./store";
 
-export function Client() {
-  const [search] = useQueryStates(searchParamsParser);
+export function Client({
+  defaultAdapterType = "nuqs",
+  defaultPrefetchEnabled = false,
+}: {
+  defaultAdapterType?: AdapterType;
+  defaultPrefetchEnabled?: boolean;
+}) {
+  useResetFocus();
+
+  // Key forces remount when adapter changes, ensuring clean state
+  return (
+    <React.Fragment>
+      {defaultAdapterType === "nuqs" ? (
+        <NuqsClient prefetchEnabled={defaultPrefetchEnabled} />
+      ) : (
+        <ZustandClient prefetchEnabled={defaultPrefetchEnabled} />
+      )}
+    </React.Fragment>
+  );
+}
+
+function NuqsClient({ prefetchEnabled }: { prefetchEnabled: boolean }) {
+  const adapter = useNuqsAdapter(filterSchema.definition, { id: "infinite" });
+
+  return (
+    <DataTableStoreProvider adapter={adapter}>
+      <ClientInner adapterType="nuqs" prefetchEnabled={prefetchEnabled} />
+    </DataTableStoreProvider>
+  );
+}
+
+function ZustandClient({ prefetchEnabled }: { prefetchEnabled: boolean }) {
+  const adapter = useZustandAdapter(useFilterStore, filterSchema.definition, {
+    id: "infinite",
+  });
+
+  return (
+    <DataTableStoreProvider adapter={adapter}>
+      <ClientInner adapterType="zustand" prefetchEnabled={prefetchEnabled} />
+    </DataTableStoreProvider>
+  );
+}
+
+// Inner component that can use BYOS hooks (inside provider context)
+function ClientInner({
+  adapterType,
+  prefetchEnabled,
+}: {
+  adapterType: AdapterType;
+  prefetchEnabled: boolean;
+}) {
+  // Read full state from adapter for data fetching
+  const search = useFilterState<FilterState>();
+
   const {
     data,
     isFetching,
@@ -26,7 +85,6 @@ export function Client() {
     fetchPreviousPage,
     refetch,
   } = useInfiniteQuery(dataOptions(search));
-  useResetFocus();
 
   const flatData = React.useMemo(
     () => data?.pages?.flatMap((page) => page.data ?? []) ?? [],
@@ -82,7 +140,11 @@ export function Client() {
         id: key,
         value,
       }))
-      .filter(({ value }) => value ?? undefined);
+      .filter(({ value }) => {
+        if (value === null || value === undefined) return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      });
   }, [filter]);
 
   return (
@@ -130,7 +192,10 @@ export function Client() {
         return <LiveRow />;
       }}
       renderSheetTitle={(props) => props.row?.original.pathname}
-      searchParamsParser={searchParamsParser}
+      schema={filterSchema.definition}
+      adapterType={adapterType}
+      prefetchEnabled={prefetchEnabled}
+      showConfigurationDropdown
     />
   );
 }
@@ -147,8 +212,9 @@ function useResetFocus() {
 }
 
 // TODO: make a BaseObject (incl. date and uuid e.g. for every upcoming branch of infinite table)
+// NOTE: Must be called inside DataTableStoreProvider context
 export function useLiveMode<TData extends { date: Date }>(data: TData[]) {
-  const [live] = useQueryState("live", searchParamsParser.live);
+  const live = useFilterState<FilterState, FilterState["live"]>((s) => s.live);
   // REMINDER: used to capture the live mode on timestamp
   const liveTimestamp = React.useRef<number | undefined>(
     live ? new Date().getTime() : undefined,
@@ -162,6 +228,7 @@ export function useLiveMode<TData extends { date: Date }>(data: TData[]) {
   const anchorRow = React.useMemo(() => {
     if (!live) return undefined;
 
+    // eslint-disable-next-line react-hooks/refs
     const item = data.find((item) => {
       // return first item that is there if not liveTimestamp
       if (!liveTimestamp.current) return true;
@@ -174,6 +241,7 @@ export function useLiveMode<TData extends { date: Date }>(data: TData[]) {
     return item;
   }, [live, data]);
 
+  // eslint-disable-next-line react-hooks/refs
   return { row: anchorRow, timestamp: liveTimestamp.current };
 }
 

@@ -8,45 +8,58 @@ import { default as NextLink } from "next/link";
 
 export default function Home() {
   return (
-    <div className="container mx-auto flex min-h-screen w-full flex-col gap-8 p-4 sm:p-8 xl:gap-12 xl:p-12">
+    <div className="container mx-auto flex min-h-screen w-full flex-col gap-6 p-4 sm:p-8 xl:gap-12 xl:p-12">
       <div className="px-2.5">
         <Hero />
       </div>
       <div className="border-b border-dashed border-border" />
       <div className="grid gap-8 xl:grid-cols-2 xl:gap-12">
-        <NextLink href="/default" className="group flex flex-col gap-2.5">
-          <div className="flex flex-col justify-center rounded-lg border border-border/70 bg-muted/40 px-5 py-6 group-hover:border-border group-hover:bg-muted/50 md:px-10 md:py-12 xl:aspect-video">
-            <div className="flex w-full flex-col gap-2.5 transition-all duration-300 group-hover:scale-[1.02]">
-              <div className="flex flex-1 flex-row items-end gap-2.5">
-                <div className="-my-2 hidden sm:block">
-                  <Controls className="w-24" />
-                </div>
-                <div className="flex flex-1 flex-col gap-2">
-                  <CommandInput />
-                  <Toolbar />
-                  <DefaultTable />
-                  <Pagination />
+        <div className="relative">
+          <Badge
+            variant="outline"
+            className="absolute -top-3 right-3 border-dashed border-border bg-background px-1.5 font-mono"
+          >
+            nuqs | zustand
+          </Badge>
+          <NextLink href="/default" className="group flex flex-col gap-2.5">
+            <div className="flex flex-col justify-center rounded-lg border border-border/70 bg-muted/40 px-5 py-6 group-hover:border-border group-hover:bg-muted/50 md:px-10 md:py-12 xl:aspect-video">
+              <div className="flex w-full flex-col gap-2.5 transition-all duration-300 group-hover:scale-[1.02]">
+                <div className="flex flex-1 flex-row items-end gap-2.5">
+                  <div className="-my-2 hidden sm:block">
+                    <Controls className="w-24" />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2">
+                    <CommandInput />
+                    <Toolbar />
+                    <DefaultTable />
+                    <Pagination />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div className="px-2.5 py-2">
-            <p className="font-medium group-hover:underline">
-              Default Data-Table
-            </p>
-            <p className="text-sm text-muted-foreground">
-              A{" "}
-              <span className="underline decoration-yellow-500 decoration-wavy underline-offset-2">
-                simple
-              </span>{" "}
-              data-table with a{" "}
-              <span className="font-medium text-foreground">client-side</span>{" "}
-              filter and pagination.
-            </p>
-          </div>
-        </NextLink>
+            <div className="px-2.5 py-2">
+              <p className="font-medium group-hover:underline">
+                Default Data-Table
+              </p>
+              <p className="text-sm text-muted-foreground">
+                A{" "}
+                <span className="underline decoration-yellow-500 decoration-wavy underline-offset-2">
+                  simple
+                </span>{" "}
+                data-table with a{" "}
+                <span className="font-medium text-foreground">client-side</span>{" "}
+                filter and pagination.
+              </p>
+            </div>
+          </NextLink>
+        </div>
         <div className="relative">
-          <GuideBadgeLink className="absolute -top-3 right-3" />
+          <Badge
+            variant="outline"
+            className="absolute -top-3 right-3 border-dashed border-border bg-background px-1.5 font-mono"
+          >
+            nuqs | zustand
+          </Badge>
           <NextLink href="/infinite" className="group flex flex-col gap-2.5">
             <div className="flex flex-col justify-center rounded-lg border border-border/70 bg-muted/40 px-5 py-6 group-hover:border-border group-hover:bg-muted/50 md:px-10 md:py-12 xl:aspect-video">
               <div className="flex w-full flex-row items-end gap-2.5 transition-all duration-300 group-hover:scale-[1.02] sm:divide-x">
@@ -242,13 +255,16 @@ function Toolbar() {
 }
 
 const BARS = 50;
+// Pre-generate heights to avoid Math.random() during render
+const BAR_HEIGHTS = Array.from(
+  { length: BARS },
+  () => ["h-2.5", "h-2", "h-1.5", "h-1"][Math.floor(Math.random() * 4)],
+);
+
 function Timeline() {
   return (
     <div className="flex items-end gap-px">
-      {Array.from({ length: BARS }).map((_, i) => {
-        const height = ["h-2.5", "h-2", "h-1.5", "h-1"][
-          Math.floor(Math.random() * 4)
-        ];
+      {BAR_HEIGHTS.map((height, i) => {
         return (
           <div
             key={i}
@@ -316,12 +332,12 @@ function Pagination() {
 function Hero() {
   return (
     <div className="flex flex-col-reverse items-start justify-between gap-8 sm:flex-row">
-      <div className="max-w-4xl">
-        <h1 className="mb-4 text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
+      <div className="max-w-4xl space-y-3">
+        <h1 className="text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
           Powerful <span className="text-nowrap">Data-Table</span> for React
         </h1>
         {/* REMINDER: text-balance produces layout shifts on iOS here - maybe due to arrow svg? */}
-        <p className="max-w-[650px] text-lg text-muted-foreground">
+        <p className="max-w-[750px] text-lg text-muted-foreground">
           Extensible, fast, and easy-to-use filters with{" "}
           <Link href="https://tanstack.com/table" className="text-nowrap">
             tanstack table
@@ -330,12 +346,20 @@ function Hero() {
           <Link href="https://ui.shadcn.com" className="text-nowrap">
             shadcn/ui
           </Link>{" "}
-          and search params via <Link href="https://nuqs.47ng.com">nuqs</Link>.
-          Open Source on{" "}
+          and state management via{" "}
+          <Link href="https://nuqs.47ng.com">nuqs</Link> (url-based) or{" "}
+          <Link href="https://zustand.docs.pmnd.rs/getting-started/introduction">
+            zustand
+          </Link>{" "}
+          (client-side). Open Source on{" "}
           <Link href="https://github.com/openstatusHQ/data-table-filters">
             GitHub
           </Link>
           .
+        </p>
+        <p className="text-lg text-muted-foreground">
+          Learn more in the <Link href="/guide">Guide</Link>. Extendable with
+          BYOS (Bring Your Own Store).
         </p>
       </div>
       <NextLink

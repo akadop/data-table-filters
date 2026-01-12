@@ -1,7 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, X } from "lucide-react";
-import * as React from "react";
+import { Kbd } from "@/components/custom/kbd";
 import {
   Sheet,
   SheetClose,
@@ -10,18 +9,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/custom/sheet";
+import { useDataTable } from "@/components/data-table/data-table-provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Kbd } from "@/components/custom/kbd";
 import { cn } from "@/lib/utils";
-import { useDataTable } from "@/components/data-table/data-table-provider";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
+import * as React from "react";
 
 export interface DataTableSheetDetailsProps {
   title?: React.ReactNode;
@@ -43,7 +43,7 @@ export function DataTableSheetDetails({
     return table
       .getCoreRowModel()
       .flatRows.find((row) => row.id === selectedRowKey);
-  }, [selectedRowKey, isLoading]);
+  }, [selectedRowKey, isLoading, table]);
 
   const index = table
     .getCoreRowModel()
@@ -51,21 +51,21 @@ export function DataTableSheetDetails({
 
   const nextId = React.useMemo(
     () => table.getCoreRowModel().flatRows[index + 1]?.id,
-    [index, isLoading],
+    [index, isLoading, table],
   );
 
   const prevId = React.useMemo(
     () => table.getCoreRowModel().flatRows[index - 1]?.id,
-    [index, isLoading],
+    [index, isLoading, table],
   );
 
   const onPrev = React.useCallback(() => {
     if (prevId) table.setRowSelection({ [prevId]: true });
-  }, [prevId, isLoading]);
+  }, [prevId, isLoading, table]);
 
   const onNext = React.useCallback(() => {
     if (nextId) table.setRowSelection({ [nextId]: true });
-  }, [nextId, isLoading]);
+  }, [nextId, isLoading, table]);
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -123,7 +123,7 @@ export function DataTableSheetDetails({
             </SheetTitle>
             <div className="flex h-7 items-center gap-1">
               <TooltipProvider>
-                <Tooltip>
+                <Tooltip delayDuration={100}>
                   <TooltipTrigger asChild>
                     <Button
                       size="icon"
@@ -144,7 +144,7 @@ export function DataTableSheetDetails({
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider>
-                <Tooltip>
+                <Tooltip delayDuration={100}>
                   <TooltipTrigger asChild>
                     <Button
                       size="icon"

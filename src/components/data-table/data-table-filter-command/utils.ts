@@ -4,8 +4,8 @@ import {
   SLIDER_DELIMITER,
 } from "@/lib/delimiters";
 import { isArrayOfDates } from "@/lib/is-array";
-import { ColumnFiltersState } from "@tanstack/react-table";
-import { ParserBuilder } from "nuqs";
+import type { FieldBuilder, SchemaDefinition } from "@/lib/store/schema/types";
+import type { ColumnFiltersState } from "@tanstack/react-table";
 import type { DataTableFilterField } from "../types";
 
 /**
@@ -28,6 +28,17 @@ export function getWordByCaretPosition({
   return word;
 }
 
+/**
+ * Quote a value if it contains spaces
+ */
+function quoteIfNeeded(val: string | number | boolean | undefined): string {
+  const str = `${val}`;
+  if (str.includes(" ")) {
+    return `"${str}"`;
+  }
+  return str;
+}
+
 export function replaceInputByFieldType<TData>({
   prev,
   currentWord,
@@ -45,7 +56,7 @@ export function replaceInputByFieldType<TData>({
     case "checkbox": {
       if (currentWord.includes(ARRAY_DELIMITER)) {
         const words = currentWord.split(ARRAY_DELIMITER);
-        words[words.length - 1] = `${optionValue}`;
+        words[words.length - 1] = quoteIfNeeded(optionValue);
         const input = prev.replace(currentWord, words.join(ARRAY_DELIMITER));
         return `${input.trim()} `;
       }
@@ -67,7 +78,12 @@ export function replaceInputByFieldType<TData>({
       }
     }
     default: {
-      const input = prev.replace(currentWord, value);
+      // Quote the value if it contains spaces
+      const quotedValue = quoteIfNeeded(optionValue) || value;
+      const input = prev.replace(
+        currentWord,
+        `${String(field.value)}:${quotedValue}`,
+      );
       return `${input.trim()} `;
     }
   }
@@ -211,34 +227,81 @@ export function notEmpty<TValue>(
   return value !== null && value !== undefined;
 }
 
-export function columnFiltersParser<TData>({
-  searchParamsParser,
+/**
+ * Tokenize input string, respecting quoted values
+ *
+ * Examples:
+ * - `name:john regions:ams` → [["name", "john"], ["regions", "ams"]]
+ * - `name:"john doe" regions:ams` → [["name", "john doe"], ["regions", "ams"]]
+ * - `url:"https://example.com/path with spaces"` → [["url", "https://example.com/path with spaces"]]
+ */
+export function tokenizeFilterInput(input: string): Array<[string, string]> {
+  const results: Array<[string, string]> = [];
+  const trimmed = input.trim();
+
+  // Regex to match: key:"quoted value" or key:unquoted_value
+  // This handles:
+  // - key:"value with spaces"
+  // - key:'value with spaces' (single quotes)
+  // - key:valueWithoutSpaces
+  const regex = /(\w+):(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+
+  let match;
+  while ((match = regex.exec(trimmed)) !== null) {
+    const key = match[1];
+    // Value is in group 2 (double quotes), group 3 (single quotes), or group 4 (unquoted)
+    const value = match[2] ?? match[3] ?? match[4];
+    if (key && value !== undefined) {
+      results.push([key, value]);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Serialize a value, adding quotes if it contains spaces
+ */
+export function serializeFilterValue(value: string): string {
+  if (value.includes(" ")) {
+    return `"${value}"`;
+  }
+  return value;
+}
+
+/**
+ * Schema-based column filters parser for BYOS
+ *
+ * This parser works with the new schema system instead of nuqs ParserBuilder.
+ */
+export function columnFiltersParserFromSchema<TData>({
+  schema,
   filterFields,
 }: {
-  searchParamsParser: Record<string, ParserBuilder<any>>;
+  schema: SchemaDefinition;
   filterFields: DataTableFilterField<TData>[];
 }) {
   return {
     parse: (inputValue: string) => {
-      const values = inputValue
-        .trim()
-        .split(" ")
-        .reduce(
-          (prev, curr) => {
-            const [name, value] = curr.split(":");
-            if (!value || !name) return prev;
-            prev[name] = value;
-            return prev;
-          },
-          {} as Record<string, string>,
-        );
+      // Use tokenizer that respects quoted values
+      const tokens = tokenizeFilterInput(inputValue);
+      const values = tokens.reduce(
+        (prev, [name, value]) => {
+          prev[name] = value;
+          return prev;
+        },
+        {} as Record<string, string>,
+      );
 
       const searchParams = Object.entries(values).reduce(
         (prev, [key, value]) => {
-          const parser = searchParamsParser[key];
-          if (!parser) return prev;
+          const fieldBuilder = schema[key] as FieldBuilder<unknown> | undefined;
+          if (!fieldBuilder) return prev;
 
-          prev[key] = parser.parse(value);
+          const parsed = fieldBuilder._config.parse(value);
+          if (parsed !== null) {
+            prev[key] = parsed;
+          }
           return prev;
         },
         {} as Record<string, unknown>,
@@ -250,12 +313,19 @@ export function columnFiltersParser<TData>({
       const values = columnFilters.reduce((prev, curr) => {
         const { commandDisabled } = filterFields?.find(
           (field) => curr.id === field.value,
-        ) || { commandDisabled: true }; // if column filter is not found, disable the command by default
-        const parser = searchParamsParser[curr.id];
+        ) || { commandDisabled: true };
+        const fieldBuilder = schema[curr.id] as
+          | FieldBuilder<unknown>
+          | undefined;
 
-        if (commandDisabled || !parser) return prev;
+        if (commandDisabled || !fieldBuilder) return prev;
 
-        return `${prev}${curr.id}:${parser.serialize(curr.value)} `;
+        const serialized = fieldBuilder._config.serialize(curr.value);
+        if (!serialized) return prev;
+
+        // Wrap in quotes if value contains spaces
+        const quotedValue = serializeFilterValue(serialized);
+        return `${prev}${curr.id}:${quotedValue} `;
       }, "");
 
       return values;

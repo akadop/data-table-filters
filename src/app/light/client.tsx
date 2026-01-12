@@ -1,8 +1,9 @@
 "use client";
 
 import { getLevelRowClassName } from "@/lib/request/level";
+import { DataTableStoreProvider, useFilterState } from "@/lib/store";
+import { useNuqsAdapter } from "@/lib/store/adapters/nuqs";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useQueryStates } from "nuqs";
 import * as React from "react";
 import {
   getFacetedMinMaxValues,
@@ -12,10 +13,26 @@ import { DataTableInfinite } from "../infinite/data-table-infinite";
 import { columns } from "./columns";
 import { filterFields as defaultFilterFields, sheetFields } from "./constants";
 import { dataOptions } from "./query-options";
-import { searchParamsParser } from "./search-params";
+import { filterSchema } from "./schema";
+
+// Infer FilterState from schema
+type FilterState = typeof filterSchema._type;
 
 export function Client() {
-  const [search] = useQueryStates(searchParamsParser);
+  const adapter = useNuqsAdapter(filterSchema.definition, { id: "light" });
+
+  return (
+    <DataTableStoreProvider adapter={adapter}>
+      <ClientInner />
+    </DataTableStoreProvider>
+  );
+}
+
+// Inner component that can use BYOS hooks (inside provider context)
+function ClientInner() {
+  // Read full state from adapter for data fetching
+  const search = useFilterState<FilterState>();
+
   const { data, isFetching, isLoading, fetchNextPage, hasNextPage, refetch } =
     useInfiniteQuery(dataOptions(search));
 
@@ -36,6 +53,7 @@ export function Client() {
   const { sort, cursor, direction, uuid, ...filter } = search;
 
   // TODO: replace completely by facets
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filterFields = React.useMemo(() => {
     return defaultFilterFields.map((field) => {
       const facet = facets?.[field.value];
@@ -66,7 +84,11 @@ export function Client() {
         id: key,
         value,
       }))
-      .filter(({ value }) => value ?? undefined);
+      .filter(({ value }) => {
+        if (value === null || value === undefined) return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      });
   }, [filter]);
 
   return (
@@ -97,7 +119,8 @@ export function Client() {
       fetchPreviousPage={undefined}
       refetch={refetch}
       renderSheetTitle={(props) => props.row?.original.url}
-      searchParamsParser={searchParamsParser}
+      schema={filterSchema.definition}
+      tableId="light"
     />
   );
 }

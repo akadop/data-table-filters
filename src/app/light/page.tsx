@@ -1,10 +1,9 @@
 import { getQueryClient } from "@/providers/get-query-client";
-import { SearchParams } from "nuqs";
-import * as React from "react";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import type { SearchParams } from "nuqs";
 import { Client } from "./client";
 import { dataOptions } from "./query-options";
 import { searchParamsCache } from "./search-params";
-import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 
 export default async function Page({
   searchParams,

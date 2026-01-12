@@ -10,6 +10,7 @@ import type {
 } from "@tanstack/react-table";
 import { createContext, useContext, useMemo } from "react";
 import { ControlsProvider } from "../../providers/controls";
+import { DataTableStoreSync } from "./data-table-store-sync";
 
 // REMINDER: read about how to move controlled state out of the useReactTable hook
 // https://github.com/TanStack/table/discussions/4005#discussioncomment-7303569
@@ -56,6 +57,7 @@ export function DataTableProvider<TData, TValue>({
     children: React.ReactNode;
   }) {
   const value = useMemo(
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     () => ({
       ...props,
       columnFilters: props.columnFilters ?? [],
@@ -85,7 +87,10 @@ export function DataTableProvider<TData, TValue>({
 
   return (
     <DataTableContext.Provider value={value}>
-      <ControlsProvider>{children}</ControlsProvider>
+      <ControlsProvider>
+        <DataTableStoreSync />
+        {children}
+      </ControlsProvider>
     </DataTableContext.Provider>
   );
 }

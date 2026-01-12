@@ -33,14 +33,14 @@ export function DataTableToolbar({ renderActions }: DataTableToolbarProps) {
       total: table.getCoreRowModel().rows.length,
       filtered: table.getFilteredRowModel().rows.length,
     }),
-    [isLoading, columnFilters],
+    [isLoading, columnFilters, table],
   );
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <TooltipProvider>
-          <Tooltip>
+          <Tooltip delayDuration={100}>
             <TooltipTrigger asChild>
               <Button
                 size="sm"

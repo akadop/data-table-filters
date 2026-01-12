@@ -1,5 +1,8 @@
 "use client";
 
+// REMINDER: React Compiler is not compatible with Tanstack Table v8 https://github.com/TanStack/table/issues/5567
+"use no memo";
+
 import {
   Table,
   TableBody,
@@ -22,7 +25,14 @@ import type {
 import { Button } from "@/components/ui/button";
 import { useHotKey } from "@/hooks/use-hot-key";
 import { useLocalStorage } from "@/hooks/use-local-storage";
+import {
+  getColumnOrderKey,
+  getColumnVisibilityKey,
+} from "@/lib/constants/local-storage";
 import { formatCompactNumber } from "@/lib/format";
+import type { AdapterType } from "@/lib/store";
+import { useFilterState } from "@/lib/store";
+import type { SchemaDefinition } from "@/lib/store/schema/types";
 import { arrSome, inDateRange } from "@/lib/table/filterfns";
 import { cn } from "@/lib/utils";
 import {
@@ -51,13 +61,11 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { LoaderCircle } from "lucide-react";
-import { useQueryState, useQueryStates, type ParserBuilder } from "nuqs";
 import * as React from "react";
 import { LiveButton } from "./_components/live-button";
 import { RefreshButton } from "./_components/refresh-button";
 import { SocialsFooter } from "./_components/socials-footer";
 import { BaseChartSchema } from "./schema";
-import { searchParamsParser } from "./search-params";
 import { TimelineChart } from "./timeline-chart";
 
 // TODO: add a possible chartGroupBy
@@ -102,7 +110,15 @@ export interface DataTableInfiniteProps<TData, TValue, TMeta> {
   renderSheetTitle: (props: { row?: Row<TData> }) => React.ReactNode;
   // TODO:
   renderChart?: () => React.ReactNode;
-  searchParamsParser: Record<string, ParserBuilder<any>>;
+  // Schema definition for BYOS filter command
+  schema: SchemaDefinition;
+  // Used to store column order and visibility in local storage for specific data-table namespace
+  tableId?: string;
+  // Show the prefetch toggle button in the toolbar
+  showConfigurationDropdown?: boolean;
+  // Adapter toggle and prefetch toggle (for demo purposes)
+  adapterType?: AdapterType;
+  prefetchEnabled?: boolean;
 }
 
 export function DataTableInfinite<TData, TValue, TMeta>({
@@ -132,7 +148,11 @@ export function DataTableInfinite<TData, TValue, TMeta>({
   meta,
   renderLiveRow,
   renderSheetTitle,
-  searchParamsParser,
+  schema,
+  tableId = "infinite",
+  showConfigurationDropdown = false,
+  adapterType = "nuqs",
+  prefetchEnabled = false,
 }: DataTableInfiniteProps<TData, TValue, TMeta>) {
   const [columnFilters, setColumnFilters] =
     React.useState<ColumnFiltersState>(defaultColumnFilters);
@@ -141,19 +161,17 @@ export function DataTableInfinite<TData, TValue, TMeta>({
   const [rowSelection, setRowSelection] =
     React.useState<RowSelectionState>(defaultRowSelection);
   const [columnOrder, setColumnOrder] = useLocalStorage<string[]>(
-    "data-table-column-order",
+    getColumnOrderKey(tableId),
     [],
   );
   const [columnVisibility, setColumnVisibility] =
     useLocalStorage<VisibilityState>(
-      "data-table-visibility",
+      getColumnVisibilityKey(tableId),
       defaultColumnVisibility,
     );
   const topBarRef = React.useRef<HTMLDivElement>(null);
   const tableRef = React.useRef<HTMLTableElement>(null);
   const [topBarHeight, setTopBarHeight] = React.useState(0);
-  // FIXME: searchParamsParser needs to be passed as property
-  const [_, setSearch] = useQueryStates(searchParamsParser);
 
   const onScroll = React.useCallback(
     (e: React.UIEvent<HTMLElement>) => {
@@ -212,31 +230,7 @@ export function DataTableInfinite<TData, TValue, TMeta>({
     meta: { getRowClassName },
   });
 
-  React.useEffect(() => {
-    const columnFiltersWithNullable = filterFields.map((field) => {
-      const filterValue = columnFilters.find(
-        (filter) => filter.id === field.value,
-      );
-      if (!filterValue) return { id: field.value, value: null };
-      return { id: field.value, value: filterValue.value };
-    });
-
-    const search = columnFiltersWithNullable.reduce(
-      (prev, curr) => {
-        prev[curr.id as string] = curr.value;
-        return prev;
-      },
-      {} as Record<string, unknown>,
-    );
-
-    setSearch(search);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnFilters]);
-
-  React.useEffect(() => {
-    setSearch({ sort: sorting?.[0] || null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sorting]);
+  // NOTE: Filter, sort, and selection syncing is now handled by DataTableStoreSync
 
   const selectedRow = React.useMemo(() => {
     if ((isLoading || isFetching) && !data.length) return;
@@ -246,16 +240,12 @@ export function DataTableInfinite<TData, TValue, TMeta>({
       .flatRows.find((row) => row.id === selectedRowKey);
   }, [rowSelection, table, isLoading, isFetching, data]);
 
-  // TODO: can only share uuid within the first batch
+  // Reset row selection if selected row is no longer in data
   React.useEffect(() => {
     if (isLoading || isFetching) return;
     if (Object.keys(rowSelection)?.length && !selectedRow) {
-      setSearch({ uuid: null });
       setRowSelection({});
-    } else {
-      setSearch({ uuid: Object.keys(rowSelection)?.[0] || null });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowSelection, selectedRow, isLoading, isFetching]);
 
   /**
@@ -287,6 +277,21 @@ export function DataTableInfinite<TData, TValue, TMeta>({
     setColumnOrder([]);
     setColumnVisibility(defaultColumnVisibility);
   }, "u");
+
+  // Memoize column state as strings for efficient row memoization comparison
+  const visibleColumnIds = React.useMemo(
+    () =>
+      table
+        .getVisibleLeafColumns()
+        .map((c) => c.id)
+        .join(","),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [table.getState().columnVisibility],
+  );
+  const columnOrderString = React.useMemo(
+    () => columnOrder.join(","),
+    [columnOrder],
+  );
 
   return (
     <DataTableProvider
@@ -333,7 +338,11 @@ export function DataTableInfinite<TData, TValue, TMeta>({
             <DataTableFilterControls />
           </div>
           <div className="border-t border-border bg-background p-4 md:sticky md:bottom-0">
-            <SocialsFooter />
+            <SocialsFooter
+              showConfigurationDropdown={showConfigurationDropdown}
+              prefetchEnabled={prefetchEnabled}
+              adapterType={adapterType}
+            />
           </div>
         </div>
         <div
@@ -350,7 +359,7 @@ export function DataTableInfinite<TData, TValue, TMeta>({
               "sticky top-0 z-10 pb-4",
             )}
           >
-            <DataTableFilterCommand searchParamsParser={searchParamsParser} />
+            <DataTableFilterCommand schema={schema} tableId={tableId} />
             {/* TBD: better flexibility with compound components? */}
             <DataTableToolbar
               renderActions={() => [
@@ -444,6 +453,8 @@ export function DataTableInfinite<TData, TValue, TMeta>({
                         row={row}
                         table={table}
                         selected={row.getIsSelected()}
+                        visibleColumnIds={visibleColumnIds}
+                        columnOrder={columnOrderString}
                       />
                     </React.Fragment>
                   ))
@@ -528,15 +539,20 @@ function Row<TData>({
   row,
   table,
   selected,
+  visibleColumnIds,
+  columnOrder,
 }: {
   row: Row<TData>;
   table: TTable<TData>;
   // REMINDER: row.getIsSelected(); - just for memoization
   selected?: boolean;
+  // REMINDER: for memoization - triggers re-render when columns change
+  visibleColumnIds: string;
+  columnOrder: string;
 }) {
   // REMINDER: rerender the row when live mode is toggled - used to opacity the row
   // via the `getRowClassName` prop - but for some reasons it wil render the row on data fetch
-  useQueryState("live", searchParamsParser.live);
+  useFilterState((s) => s.live);
   return (
     <TableRow
       id={row.id}
@@ -573,5 +589,8 @@ function Row<TData>({
 const MemoizedRow = React.memo(
   Row,
   (prev, next) =>
-    prev.row.id === next.row.id && prev.selected === next.selected,
+    prev.row.id === next.row.id &&
+    prev.selected === next.selected &&
+    prev.visibleColumnIds === next.visibleColumnIds &&
+    prev.columnOrder === next.columnOrder,
 ) as typeof Row;
